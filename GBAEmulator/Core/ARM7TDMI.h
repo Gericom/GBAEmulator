@@ -105,4 +105,18 @@ private:
 	bool Instruction_Thumb_2();
 	bool Instruction_Thumb_3();
 	bool Instruction_Thumb_4();
+	bool Instruction_Thumb_5();
+	bool Instruction_Thumb_6();
+	bool Instruction_Thumb_7();
+	bool Instruction_Thumb_9();
+	bool Instruction_Thumb_10();
+	bool Instruction_Thumb_11();
+	bool Instruction_Thumb_12();
+	bool Instruction_Thumb_13();
+	bool Instruction_Thumb_14();
+	bool Instruction_Thumb_16();
+	bool Instruction_Thumb_17();
+	bool Instruction_Thumb_18();
+	bool Instruction_Thumb_19A();
+	bool Instruction_Thumb_19B();
 };

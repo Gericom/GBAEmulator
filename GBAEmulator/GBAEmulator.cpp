@@ -4,7 +4,9 @@
 #include "stdafx.h"
 #include <stdio.h>
 #include "Core\MemoryBus.h"
+#include "Core\BIOS.h"
 #include "Core\WRAM.h"
+#include "Core\IORegisters.h"
 #include "Core\GamePakInterface.h"
 #include "Core\ARM7TDMI.h"
 #include "GBAEmulator.h"
@@ -202,9 +204,20 @@ DWORD WINAPI MainThread(LPVOID lpParam)
 	fseek(rom, 0, SEEK_SET);
 	fread(data, 1, size, rom);
 	fclose(rom);
+	FILE* biosFile = fopen("d:\\Projects\\Visual Studio 2015\\GBAEmulator\\Debug\\GBA.ROM", "rb");
+	fseek(biosFile, 0, SEEK_END);
+	size = ftell(biosFile);
+	uint8_t* biosData = (uint8_t*)malloc(size);
+	fseek(biosFile, 0, SEEK_SET);
+	fread(biosData, 1, size, biosFile);
+	fclose(biosFile);
 	MemoryBus* memoryBus = new MemoryBus();
+	BIOS* bios = new BIOS(biosData);
+	memoryBus->SetDevice(bios, 0);
 	WRAM* wram = new WRAM();
 	memoryBus->SetDevice(wram, 3);
+	IORegisters* ioRegisters = new IORegisters();
+	memoryBus->SetDevice(ioRegisters, 4);
 	GamePakInterface* gamePak = new GamePakInterface(data);
 	memoryBus->SetDevice(gamePak, 8);
 	memoryBus->SetDevice(gamePak, 9);
@@ -221,6 +234,7 @@ DWORD WINAPI MainThread(LPVOID lpParam)
 	}
 	delete processor;
 	delete gamePak;
+	delete ioRegisters;
 	delete wram;
 	delete memoryBus;
 	free(data);

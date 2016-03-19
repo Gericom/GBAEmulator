@@ -18,7 +18,7 @@ void WRAM::HandleRequest(MemoryBus* memoryBus)
 			break;
 		case MEMORYBUS_REQUEST_READ_32:
 			memoryBus->mRequestData = mMemory[memoryBus->mRequestAddress - 0x03000000] | (mMemory[memoryBus->mRequestAddress - 0x03000000 + 1] << 8) | 
-				(mMemory[memoryBus->mRequestAddress - 0x08000000 + 2] << 16) | (mMemory[memoryBus->mRequestAddress - 0x08000000 + 3] << 24);
+				(mMemory[memoryBus->mRequestAddress - 0x03000000 + 2] << 16) | (mMemory[memoryBus->mRequestAddress - 0x03000000 + 3] << 24);
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_WRITE_8:

@@ -143,12 +143,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="Core\ARM7TDMI.h" />
+    <ClInclude Include="Core\BIOS.h" />
     <ClInclude Include="Core\ClockBlock.h" />
     <ClInclude Include="Core\GamePakInterface.h" />
+    <ClInclude Include="Core\IORegisters.h" />
     <ClInclude Include="Core\MemoryDevice.h" />
     <ClInclude Include="Core\MemoryBus.h" />
     <ClInclude Include="Core\WRAM.h" />
@@ -159,7 +158,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Core\ARM7TDMI.cpp" />
+    <ClCompile Include="Core\BIOS.cpp" />
     <ClCompile Include="Core\GamePakInterface.cpp" />
+    <ClCompile Include="Core\IORegisters.cpp" />
     <ClCompile Include="Core\MemoryBus.cpp" />
     <ClCompile Include="Core\WRAM.cpp" />
     <ClCompile Include="GBAEmulator.cpp" />
