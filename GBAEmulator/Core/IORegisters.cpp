@@ -4,7 +4,7 @@
 void IORegisters::HandleRequest(MemoryBus* memoryBus)
 {
 	//TODO: Implement waitstates and alignment later on
-	if (memoryBus->mRequestAddress >= 0x04000000 && memoryBus->mRequestAddress < 0x04000400)
+	if (memoryBus->mRequestAddress >= 0x04000000 && memoryBus->mRequestAddress < 0x04001000)//0x04000400)
 	{
 		switch (memoryBus->mRequest)
 		{
@@ -22,12 +22,24 @@ void IORegisters::HandleRequest(MemoryBus* memoryBus)
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_WRITE_8:
-			mMemory[memoryBus->mRequestAddress - 0x04000000] = memoryBus->mRequestData & 0xFF;
+			if (memoryBus->mRequestAddress == 0x04000202)
+			{
+				mMemory[memoryBus->mRequestAddress - 0x04000000] &= (~memoryBus->mRequestData) & 0xFF;
+			}
+			else mMemory[memoryBus->mRequestAddress - 0x04000000] = memoryBus->mRequestData & 0xFF;
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_WRITE_16:
-			mMemory[memoryBus->mRequestAddress - 0x04000000] = memoryBus->mRequestData & 0xFF;
-			mMemory[memoryBus->mRequestAddress - 0x04000000 + 1] = (memoryBus->mRequestData >> 8) & 0xFF;
+			if (memoryBus->mRequestAddress == 0x04000202)
+			{
+				mMemory[memoryBus->mRequestAddress - 0x04000000] &= (~memoryBus->mRequestData) & 0xFF;
+				mMemory[memoryBus->mRequestAddress - 0x04000000 + 1] &= ((~memoryBus->mRequestData) >> 8) & 0xFF;
+			}
+			else
+			{
+				mMemory[memoryBus->mRequestAddress - 0x04000000] = memoryBus->mRequestData & 0xFF;
+				mMemory[memoryBus->mRequestAddress - 0x04000000 + 1] = (memoryBus->mRequestData >> 8) & 0xFF;
+			}
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_WRITE_32:
@@ -44,5 +56,6 @@ void IORegisters::HandleRequest(MemoryBus* memoryBus)
 	else
 	{
 		//What do I do here, this shouldn't happen however
+		OutputDebugString(L"Unknown Memory!");
 	}
 }

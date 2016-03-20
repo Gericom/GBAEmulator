@@ -5,13 +5,19 @@
 #include <stdio.h>
 #include "Core\MemoryBus.h"
 #include "Core\BIOS.h"
-#include "Core\WRAM.h"
+#include "Core\BoardWRAM.h"
+#include "Core\ChipWRAM.h"
 #include "Core\IORegisters.h"
+#include "Core\PalRam.h"
+#include "Core\VRAM.h"
+#include "Core\OAM.h"
 #include "Core\GamePakInterface.h"
+#include "Core\LCDVideoController.h"
 #include "Core\ARM7TDMI.h"
 #include "GBAEmulator.h"
 
 static bool stop = false;
+static HWND hWnd;
 
 DWORD WINAPI MainThread(LPVOID lpParam);
 
@@ -111,7 +117,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
    hInst = hInstance; // Store instance handle in our global variable
 
-   HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+   hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
    if (!hWnd)
@@ -197,6 +203,7 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
 DWORD WINAPI MainThread(LPVOID lpParam)
 {
+	HDC hdc = GetDC(hWnd);
 	FILE* rom = fopen("d:\\Old\\Temp\\MKSC\\Mario Kart Super Circuit (U).gba", "rb");
 	fseek(rom, 0, SEEK_END);
 	long size = ftell(rom);
@@ -206,19 +213,27 @@ DWORD WINAPI MainThread(LPVOID lpParam)
 	fclose(rom);
 	FILE* biosFile = fopen("d:\\Projects\\Visual Studio 2015\\GBAEmulator\\Debug\\GBA.ROM", "rb");
 	fseek(biosFile, 0, SEEK_END);
-	size = ftell(biosFile);
-	uint8_t* biosData = (uint8_t*)malloc(size);
+	long size2 = ftell(biosFile);
+	uint8_t* biosData = (uint8_t*)malloc(size2);
 	fseek(biosFile, 0, SEEK_SET);
-	fread(biosData, 1, size, biosFile);
+	fread(biosData, 1, size2, biosFile);
 	fclose(biosFile);
 	MemoryBus* memoryBus = new MemoryBus();
 	BIOS* bios = new BIOS(biosData);
 	memoryBus->SetDevice(bios, 0);
-	WRAM* wram = new WRAM();
-	memoryBus->SetDevice(wram, 3);
+	BoardWRAM* boardWRAM = new BoardWRAM();
+	memoryBus->SetDevice(boardWRAM, 2);
+	ChipWRAM* chipWRAM = new ChipWRAM();
+	memoryBus->SetDevice(chipWRAM, 3);
 	IORegisters* ioRegisters = new IORegisters();
 	memoryBus->SetDevice(ioRegisters, 4);
-	GamePakInterface* gamePak = new GamePakInterface(data);
+	PalRam* palRam = new PalRam();
+	memoryBus->SetDevice(palRam, 5);
+	VRAM* vram = new VRAM();
+	memoryBus->SetDevice(vram, 6);
+	OAM* oam = new OAM();
+	memoryBus->SetDevice(oam, 7);
+	GamePakInterface* gamePak = new GamePakInterface(data, (int)size);
 	memoryBus->SetDevice(gamePak, 8);
 	memoryBus->SetDevice(gamePak, 9);
 	memoryBus->SetDevice(gamePak, 10);
@@ -226,17 +241,24 @@ DWORD WINAPI MainThread(LPVOID lpParam)
 	memoryBus->SetDevice(gamePak, 12);
 	memoryBus->SetDevice(gamePak, 13);
 	memoryBus->SetDevice(gamePak, 14);
-	ARM7TDMI* processor = new ARM7TDMI(memoryBus, 0x08000000);
+	ARM7TDMI* processor = new ARM7TDMI(memoryBus, 0);
+	LCDVideoController* lcdVideoController = new LCDVideoController(processor, ioRegisters, palRam, vram, oam, hdc);
 	while (!stop)
 	{
+		lcdVideoController->RunCycle();
 		memoryBus->RunCycle();
 		processor->RunCycle();
 	}
 	delete processor;
 	delete gamePak;
+	delete oam;
+	delete vram;
+	delete palRam;
 	delete ioRegisters;
-	delete wram;
+	delete chipWRAM;
+	delete boardWRAM;
 	delete memoryBus;
 	free(data);
+	ReleaseDC(hWnd, hdc);
 	return 0;
 }

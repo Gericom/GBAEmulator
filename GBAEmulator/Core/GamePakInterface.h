@@ -6,9 +6,10 @@ class GamePakInterface : public MemoryDevice
 {
 private:
 	void* mRomData;
+	int mRomDataSize;
 public:
-	GamePakInterface(void* romData)
-		: mRomData(romData)
+	GamePakInterface(void* romData, int size)
+		: mRomData(romData), mRomDataSize(size)
 	{ }
 	void HandleRequest(MemoryBus* memoryBus);
 };

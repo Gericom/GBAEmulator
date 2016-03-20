@@ -42,13 +42,28 @@
     <ClInclude Include="Core\MemoryDevice.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Core\WRAM.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Core\IORegisters.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\BIOS.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ChipWRAM.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\BoardWRAM.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\VRAM.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\OAM.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\PalRam.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LCDVideoController.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -68,13 +83,28 @@
     <ClCompile Include="Core\GamePakInterface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Core\WRAM.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Core\IORegisters.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Core\BIOS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ChipWRAM.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\BoardWRAM.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\VRAM.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\OAM.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\PalRam.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LCDVideoController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -3,13 +3,14 @@
 #include "MemoryBus.h"
 #include "MemoryDevice.h"
 
-class WRAM : public MemoryDevice
+class VRAM : public MemoryDevice
 {
+	friend class LCDVideoController;
 private:
-	uint8_t mMemory[32 * 1024];
+	uint8_t mMemory[96 * 1024];
 public:
-	WRAM()
-	{ 
+	VRAM()
+	{
 		ZeroMemory(&mMemory[0], sizeof(mMemory));
 	}
 	void HandleRequest(MemoryBus* memoryBus);

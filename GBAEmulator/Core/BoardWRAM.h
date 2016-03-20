@@ -3,13 +3,12 @@
 #include "MemoryBus.h"
 #include "MemoryDevice.h"
 
-class IORegisters : public MemoryDevice
+class BoardWRAM : public MemoryDevice
 {
-	friend class LCDVideoController;
 private:
-	uint8_t mMemory[0x1000];
+	uint8_t mMemory[256 * 1024];
 public:
-	IORegisters()
+	BoardWRAM()
 	{
 		ZeroMemory(&mMemory[0], sizeof(mMemory));
 	}

@@ -14,9 +14,13 @@ class MemoryDevice;
 class MemoryBus : ClockBlock
 {
 	friend class GamePakInterface;
-	friend class WRAM;
+	friend class BoardWRAM;
+	friend class ChipWRAM;
 	friend class IORegisters;
 	friend class BIOS;
+	friend class VRAM;
+	friend class OAM;
+	friend class PalRam;
 private:
 	MemoryDevice* mDevices[256];
 

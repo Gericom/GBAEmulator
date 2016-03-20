@@ -7,6 +7,30 @@
 #define ADD_CFLAG(a,b)		((b) > (0xFFFFFFFFU - (a)))
 #define SUB_CFLAG(a,b)		(!((b) > (a)))
 
+static uint8_t count_ones_8(uint8_t byte)
+{
+	static const uint8_t NIBBLE_LOOKUP[16] =
+	{
+		0, 1, 1, 2, 1, 2, 2, 3,
+		1, 2, 2, 3, 2, 3, 3, 4
+	};
+
+
+	return NIBBLE_LOOKUP[byte & 0x0F] + NIBBLE_LOOKUP[byte >> 4];
+}
+
+static uint8_t count_ones_16(uint16_t byte)
+{
+	static const uint8_t NIBBLE_LOOKUP[16] =
+	{
+		0, 1, 1, 2, 1, 2, 2, 3,
+		1, 2, 2, 3, 2, 3, 3, 4
+	};
+
+
+	return NIBBLE_LOOKUP[byte & 0x0F] + NIBBLE_LOOKUP[(byte >> 4) & 0x0F] + NIBBLE_LOOKUP[(byte >> 8) & 0x0F] + NIBBLE_LOOKUP[(byte >> 12) & 0x0F];
+}
+
 bool ARM7TDMI::EvaluateCondition(uint32_t condition)
 {
 	switch (condition)
@@ -111,8 +135,22 @@ void ARM7TDMI::RunCycle()
 		if ((this->*mExecutionState.instructionProc)())//returns true if the instruction is fully executed
 			mExecutionState.instructionProc = NULL;
 	}
+
+	if (!mExecutionState.instructionProc && !mGlobalState.irq_disable && irqPending)
+	{
+		irqPending = false;
+		mGlobalState.registers_irq[1] = mExecutionState.instructionPC + (mGlobalState.thumb ? 2 + 4 : 4 + 4);
+		mGlobalState.spsr_irq = mGlobalState.cspr;
+		mGlobalState.irq_disable = true;
+		mGlobalState.thumb = false;
+		mGlobalState.mode = ARM7TDMI_CSPR_MODE_IRQ;
+		mGlobalState.registers[15] = 0x00000018;
+		FlushPipeline();
+	}
+
 	//fetch
-	if (mDecodingState.instructionPC == mExecutionState.instructionPC && !mMemoryBus->IsBusy())//We can't fetch if the memory bus is busy
+	if ((mDecodingState.instructionPC == mExecutionState.instructionPC || (mDecodingState.done && mDecodingState.instructionPC != mExecutionState.instructionPC))
+		&& !mMemoryBus->IsBusy())//We can't fetch if the memory bus is busy
 	{
 		if (!mGlobalState.thumb)
 		{
@@ -147,16 +185,18 @@ void ARM7TDMI::RunCycle()
 				{
 				case 0:
 				case 1:
-					mExecutionState.instructionProc = &ARM7TDMI::Instruction_DataProc;
+					if (((mDecodingState.instruction >> 25) & 7) == 0 && ((mDecodingState.instruction >> 7) & 1) == 1 && ((mDecodingState.instruction >> 4) & 1) == 1)
+						mExecutionState.instructionProc = &ARM7TDMI::Instruction_HDSDataTrans;
+					else if (((mDecodingState.instruction >> 25) & 7) == 0 && ((mDecodingState.instruction >> 4) & 0xF) == 9)
+						OutputDebugString(L"Unknown instruction!");
+					else mExecutionState.instructionProc = &ARM7TDMI::Instruction_DataProc;
 					break;
 				case 0x2:
 				case 0x3:
 					mExecutionState.instructionProc = &ARM7TDMI::Instruction_SingleDataTrans;
 					break;
 				case 0x4:
-					//BlockDataTrans(c, inst);
-					//c.Registers[15] += 4;
-					OutputDebugString(L"Unknown instruction!");
+					mExecutionState.instructionProc = &ARM7TDMI::Instruction_BlockDataTrans;
 					break;
 				case 0x5://101
 					mExecutionState.instructionProc = &ARM7TDMI::Instruction_Branch;
@@ -188,6 +228,8 @@ void ARM7TDMI::RunCycle()
 				mExecutionState.instructionProc = &ARM7TDMI::Instruction_Thumb_6;
 			else if ((mDecodingState.instruction >> 12) == 5 && ((mDecodingState.instruction >> 9) & 1) == 0)
 				mExecutionState.instructionProc = &ARM7TDMI::Instruction_Thumb_7;
+			else if ((mDecodingState.instruction >> 12) == 5 && ((mDecodingState.instruction >> 9) & 1) == 1)
+				mExecutionState.instructionProc = &ARM7TDMI::Instruction_Thumb_8;
 			else if ((mDecodingState.instruction >> 13) == 3)
 				mExecutionState.instructionProc = &ARM7TDMI::Instruction_Thumb_9;
 			else if ((mDecodingState.instruction >> 12) == 8)
@@ -200,6 +242,8 @@ void ARM7TDMI::RunCycle()
 				mExecutionState.instructionProc = &ARM7TDMI::Instruction_Thumb_13;
 			else if ((mDecodingState.instruction >> 12) == 11 && ((mDecodingState.instruction >> 9) & 3) == 2)
 				mExecutionState.instructionProc = &ARM7TDMI::Instruction_Thumb_14;
+			else if ((mDecodingState.instruction >> 12) == 12)
+				mExecutionState.instructionProc = &ARM7TDMI::Instruction_Thumb_15;
 			else if ((mDecodingState.instruction >> 12) == 13 && ((mDecodingState.instruction >> 8) & 0xF) <= 0xD)
 				mExecutionState.instructionProc = &ARM7TDMI::Instruction_Thumb_16;
 			else if ((mDecodingState.instruction >> 8) == 0xDF)
@@ -327,6 +371,25 @@ bool ARM7TDMI::Instruction_DataProc()
 		case 0x8:
 			if (S == false)//MRS
 			{
+				int src = (mExecutionState.instruction >> 22) & 1;
+				if (src == 0) *Rd = mGlobalState.cspr;
+				else
+				{
+					if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_FIQ)
+						*Rd = mGlobalState.spsr_fiq;
+					else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_IRQ)
+						*Rd = mGlobalState.spsr_irq;
+					else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_SVC)
+						*Rd = mGlobalState.spsr_svc;
+					else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_ABT)
+						*Rd = mGlobalState.spsr_abt;
+					else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_UND)
+						*Rd = mGlobalState.spsr_und;
+					else
+					{
+						//not possible!
+					}
+				}
 				break;
 			}
 			else//TST
@@ -448,7 +511,7 @@ bool ARM7TDMI::Instruction_DataProc()
 					mGlobalState.cspr = mGlobalState.spsr_und;
 			}
 		}
-		if(Rd == &mGlobalState.registers[15])
+		if (Rd == &mGlobalState.registers[15])
 			FlushPipeline();
 		if (additionalCycle)
 		{
@@ -559,7 +622,208 @@ bool ARM7TDMI::Instruction_SingleDataTrans()
 		{
 			uint32_t* Rd = (uint32_t*)mExecutionState.instructionArgs[1];
 			*Rd = mMemoryBus->GetReadResult();
+			if (((mExecutionState.instruction >> 12) & 0xF) == 15)
+				FlushPipeline();
 			return true;
+		}
+	}
+	return false;
+}
+
+bool ARM7TDMI::Instruction_HDSDataTrans()
+{
+	if (mExecutionState.instructionState == 0)
+	{
+		bool I = ((mExecutionState.instruction >> 22) & 1) == 1;
+		bool P = ((mExecutionState.instruction >> 24) & 1) == 1;
+		bool U = ((mExecutionState.instruction >> 23) & 1) == 1;
+
+		bool W = false;
+
+		if (P) W = ((mExecutionState.instruction >> 21) & 1) == 1;
+
+		bool L = ((mExecutionState.instruction >> 20) & 1) == 1;
+
+		uint32_t* Rn = GetRegisterById((mExecutionState.instruction >> 16) & 0xF);
+		uint32_t* Rd = GetRegisterById((mExecutionState.instruction >> 12) & 0xF);
+
+		uint32_t Offset;
+		if (I)
+		{
+			Offset = (((mExecutionState.instruction >> 8) & 0xF) << 4) | (mExecutionState.instruction & 0xF);
+		}
+		else
+		{
+			Offset = *GetRegisterById(mExecutionState.instruction & 0xF);
+		}
+
+		uint32_t MemoryOffset = *Rn;
+		if (Rn == &mGlobalState.registers[15]) MemoryOffset = mExecutionState.instructionPC + 8;
+		if (P)
+		{
+			if (U) MemoryOffset += Offset;
+			else MemoryOffset -= Offset;
+			if (W) *Rn = MemoryOffset;
+		}
+		mExecutionState.instructionArgs[0] = MemoryOffset;
+		mExecutionState.instructionArgs[1] = (uint32_t)Rd;
+		mExecutionState.instructionArgs[2] = (uint32_t)Rn;
+		mExecutionState.instructionArgs[3] = Offset;
+		mExecutionState.instructionState++;
+		return false;
+	}
+	else if (mExecutionState.instructionState == 1)
+	{
+		if (!mMemoryBus->IsBusy())
+		{
+			uint32_t MemoryOffset = mExecutionState.instructionArgs[0];
+			uint32_t* Rd = (uint32_t*)mExecutionState.instructionArgs[1];
+			uint32_t* Rn = (uint32_t*)mExecutionState.instructionArgs[2];
+			uint32_t Offset = mExecutionState.instructionArgs[3];
+			bool P = ((mExecutionState.instruction >> 24) & 1) == 1;
+			bool U = ((mExecutionState.instruction >> 23) & 1) == 1;
+			bool L = ((mExecutionState.instruction >> 20) & 1) == 1;
+
+			if (L)
+			{
+				switch ((mExecutionState.instruction >> 5) & 3)
+				{
+				case 1:
+				case 3:
+					mMemoryBus->Read16(MemoryOffset);
+					break;
+				case 2:
+					mMemoryBus->Read8(MemoryOffset);
+					break;
+				}
+			}
+			else
+			{
+				switch ((mExecutionState.instruction >> 5) & 3)
+				{
+				case 1:
+					mMemoryBus->Write16(MemoryOffset, (Rd == &mGlobalState.registers[15] ? ((mExecutionState.instructionPC + 12) & 0xFFFF) : (*Rd & 0xFFFF)));
+					break;
+				}
+			}
+			if (!P)
+			{
+				if (U) MemoryOffset += Offset;
+				else MemoryOffset -= Offset;
+				*Rn = MemoryOffset;
+			}
+			mExecutionState.instructionState++;
+		}
+		return false;
+	}
+	else if (mExecutionState.instructionState == 2)
+	{
+		bool L = ((mExecutionState.instruction >> 20) & 1) == 1;
+		if (!L && !mMemoryBus->IsBusy())
+			return true;
+		if (L && mMemoryBus->IsDataReady())
+		{
+			uint32_t* Rd = (uint32_t*)mExecutionState.instructionArgs[1];
+			switch ((mExecutionState.instruction >> 5) & 3)
+			{
+			case 1:
+				*Rd = mMemoryBus->GetReadResult();
+				break;
+			case 2:
+				*Rd = (uint32_t)(((int)(mMemoryBus->GetReadResult() << 24)) >> 24);
+				break;
+			case 3:
+				*Rd = (uint32_t)(((int)(mMemoryBus->GetReadResult() << 16)) >> 16);
+				break;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ARM7TDMI::Instruction_BlockDataTrans()
+{
+	uint32_t P = (mExecutionState.instruction >> 24) & 1;
+	uint32_t U = (mExecutionState.instruction >> 23) & 1;
+	uint32_t S = (mExecutionState.instruction >> 22) & 1;
+	uint32_t L = (mExecutionState.instruction >> 20) & 1;
+	uint32_t RList = mExecutionState.instruction & 0xFFFF;
+	if (mExecutionState.instructionState == 0)
+	{
+		uint32_t W = (mExecutionState.instruction >> 21) & 1;
+		uint32_t Rn = (mExecutionState.instruction >> 16) & 0xF;
+		uint32_t base_address = *GetRegisterById(Rn);
+		int nrregisters = count_ones_16(RList);
+		uint32_t start_address;
+		if (P && U) start_address = base_address + 4;
+		else if (!P && U) start_address = base_address;
+		else if (P && !U) start_address = base_address - 4 * nrregisters;
+		else start_address = base_address - 4 * (nrregisters - 1);
+		//uint32_t end_address = base_address + (U ? 4 * nrregisters : -4 * nrregisters);
+		if (W) *GetRegisterById(Rn) = base_address + (U ? 4 * nrregisters : -4 * nrregisters);
+		mExecutionState.instructionArgs[0] = base_address + (U ? 4 * nrregisters : 0) + ((U && P) ? 4 : 0);
+		mExecutionState.instructionArgs[1] = start_address;
+		mExecutionState.instructionArgs[2] = 0;
+		mExecutionState.instructionState++;
+		if (!L) goto store;
+	}
+	else
+	{
+		if (L)//load
+		{
+			if (mExecutionState.instructionArgs[3] && mMemoryBus->IsDataReady())
+			{
+				mExecutionState.instructionArgs[3] = 0;
+				if (S && (RList >> 15) & 1 && mExecutionState.instructionArgs[2] == 15)
+				{
+					mGlobalState.registers[15] = mMemoryBus->GetReadResult();
+					if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_FIQ)
+						mGlobalState.cspr = mGlobalState.spsr_fiq;
+					else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_IRQ)
+						mGlobalState.cspr = mGlobalState.spsr_irq;
+					else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_SVC)
+						mGlobalState.cspr = mGlobalState.spsr_svc;
+					else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_ABT)
+						mGlobalState.cspr = mGlobalState.spsr_abt;
+					else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_UND)
+						mGlobalState.cspr = mGlobalState.spsr_und;
+					FlushPipeline();
+				}
+				else if (S && !((RList >> 15) & 1))
+					mGlobalState.registers[mExecutionState.instructionArgs[2]] = mMemoryBus->GetReadResult();
+				else
+				{
+					*GetRegisterById(mExecutionState.instructionArgs[2]) = mMemoryBus->GetReadResult();
+					if (mExecutionState.instructionArgs[2] == 15) FlushPipeline();
+				}
+				/*if (U) */mExecutionState.instructionArgs[1] += 4;
+				//else mExecutionState.instructionArgs[1] -= 4;
+				mExecutionState.instructionArgs[2]++;
+				if (mExecutionState.instructionArgs[1] == mExecutionState.instructionArgs[0]) return true;
+			}
+			if (!mMemoryBus->IsBusy())
+			{
+				while (mExecutionState.instructionArgs[2] <= 15 && !((RList >> mExecutionState.instructionArgs[2]) & 1)) mExecutionState.instructionArgs[2]++;
+				mMemoryBus->Read32(mExecutionState.instructionArgs[1]);
+				mExecutionState.instructionArgs[3] = 1;
+			}
+		}
+		else
+		{
+		store:
+			if (!mMemoryBus->IsBusy())
+			{
+				while (mExecutionState.instructionArgs[2] <= 15 && !((RList >> mExecutionState.instructionArgs[2]) & 1)) mExecutionState.instructionArgs[2]++;
+				if (mExecutionState.instructionArgs[2] == 15)
+					mMemoryBus->Write32(mExecutionState.instructionArgs[1], mExecutionState.instructionPC);
+				else if (S)
+					mMemoryBus->Write32(mExecutionState.instructionArgs[1], mGlobalState.registers[mExecutionState.instructionArgs[2]]);
+				else mMemoryBus->Write32(mExecutionState.instructionArgs[1], *GetRegisterById(mExecutionState.instructionArgs[2]));
+				mExecutionState.instructionArgs[1] += 4;
+				if (mExecutionState.instructionArgs[1] == mExecutionState.instructionArgs[0]) return true;
+				mExecutionState.instructionArgs[2]++;
+			}
 		}
 	}
 	return false;
@@ -736,9 +1000,9 @@ bool ARM7TDMI::Instruction_Thumb_5()
 {
 	uint32_t Opcode = (mExecutionState.instruction >> 8) & 0x3;
 	uint32_t Rs = ((mExecutionState.instruction >> 3) & 0xF);
-	uint32_t Rs_val = *GetRegisterById(Rs);
+	uint32_t Rs_val = (Rs == 15 ? (mExecutionState.instructionPC & ~1) + 4 : *GetRegisterById(Rs));
 	uint32_t Rd = (mExecutionState.instruction & 7) | (((mExecutionState.instruction >> 7) & 1) << 3);
-	uint32_t Rd_val = (Rd == 15 ? mExecutionState.instructionPC + 4 : *GetRegisterById(Rd));
+	uint32_t Rd_val = (Rd == 15 ? (mExecutionState.instructionPC & ~1) + 4 : *GetRegisterById(Rd));
 	uint32_t result;
 	switch (Opcode)
 	{
@@ -844,6 +1108,67 @@ bool ARM7TDMI::Instruction_Thumb_7()
 	return false;
 }
 
+bool ARM7TDMI::Instruction_Thumb_8()
+{
+	if (mExecutionState.instructionState == 0)
+	{
+		uint32_t Ro = (mExecutionState.instruction >> 6) & 7;
+		uint32_t Rb = (mExecutionState.instruction >> 3) & 7;
+		uint32_t address = mGlobalState.registers[Rb] + mGlobalState.registers[Ro];
+		mExecutionState.instructionArgs[0] = address;
+		mExecutionState.instructionState++;
+		return false;
+	}
+	else if (mExecutionState.instructionState == 1)
+	{
+		if (!mMemoryBus->IsBusy())
+		{
+			uint32_t Opcode = (mExecutionState.instruction >> 10) & 3;
+			uint32_t Rd = mExecutionState.instruction & 7;
+			switch (Opcode)
+			{
+			case 0:
+				mMemoryBus->Write16(mExecutionState.instructionArgs[0], mGlobalState.registers[Rd] & 0xFFFF);
+				break;
+			case 1:
+				mMemoryBus->Read8(mExecutionState.instructionArgs[0]);
+				break;
+			case 2:
+			case 3:
+				mMemoryBus->Read16(mExecutionState.instructionArgs[0]);
+				break;
+			}
+			mExecutionState.instructionState++;
+		}
+		return false;
+	}
+	else if (mExecutionState.instructionState == 2)
+	{
+		uint32_t Opcode = (mExecutionState.instruction >> 10) & 3;
+		uint32_t Rd = mExecutionState.instruction & 7;
+		if (Opcode == 0 && !mMemoryBus->IsBusy())
+			return true;
+		if (Opcode > 0 && mMemoryBus->IsDataReady())
+		{
+			switch (Opcode)
+			{
+			case 1:
+				mGlobalState.registers[Rd] = (uint32_t)(((int)(mMemoryBus->GetReadResult() << 24)) >> 24);
+				break;
+			case 2:
+				mGlobalState.registers[Rd] = mMemoryBus->GetReadResult();
+				break;
+			case 3:
+				mGlobalState.registers[Rd] = (uint32_t)(((int)(mMemoryBus->GetReadResult() << 16)) >> 16);
+				break;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+
 bool ARM7TDMI::Instruction_Thumb_9()
 {
 	if (mExecutionState.instructionState == 0)
@@ -946,7 +1271,6 @@ bool ARM7TDMI::Instruction_Thumb_11()
 	if (mExecutionState.instructionState == 0)
 	{
 		uint32_t imm = mExecutionState.instruction & 0xFF;
-		uint32_t Rd = (mExecutionState.instruction >> 3) & 7;
 		uint32_t address = *GetRegisterById(13) + imm * 4;
 		mExecutionState.instructionArgs[0] = address;
 		mExecutionState.instructionState++;
@@ -998,23 +1322,11 @@ bool ARM7TDMI::Instruction_Thumb_12()
 
 bool ARM7TDMI::Instruction_Thumb_13()
 {
-	uint32_t offset = mExecutionState.instruction & 63;
+	uint32_t offset = mExecutionState.instruction & 127;
 	if (mExecutionState.instruction & 0x80)
 		*GetRegisterById(13) = *GetRegisterById(13) - offset * 4;
 	else *GetRegisterById(13) = *GetRegisterById(13) + offset * 4;
 	return true;
-}
-
-static uint8_t count_ones(uint8_t byte)
-{
-	static const uint8_t NIBBLE_LOOKUP[16] =
-	{
-		0, 1, 1, 2, 1, 2, 2, 3,
-		1, 2, 2, 3, 2, 3, 3, 4
-	};
-
-
-	return NIBBLE_LOOKUP[byte & 0x0F] + NIBBLE_LOOKUP[byte >> 4];
 }
 
 bool ARM7TDMI::Instruction_Thumb_14()
@@ -1024,7 +1336,7 @@ bool ARM7TDMI::Instruction_Thumb_14()
 	uint8_t rlist = mExecutionState.instruction & 0xFF;
 	if (mExecutionState.instructionState == 0)
 	{
-		int nrregisters = count_ones(rlist) + PCLR;
+		int nrregisters = count_ones_8(rlist) + PCLR;
 		uint32_t sp = *GetRegisterById(13);
 		mExecutionState.instructionState++;
 		if (!POP)
@@ -1041,7 +1353,8 @@ bool ARM7TDMI::Instruction_Thumb_14()
 			mExecutionState.instructionArgs[1] = sp;
 			mExecutionState.instructionArgs[2] = 0;
 			*GetRegisterById(13) = sp + nrregisters * 4;
-			goto pop;
+			return false;
+			//goto pop;
 		}
 	}
 	else
@@ -1072,7 +1385,6 @@ bool ARM7TDMI::Instruction_Thumb_14()
 		}
 		else
 		{
-		pop:
 			if (mExecutionState.instructionArgs[3] && mMemoryBus->IsDataReady())
 			{
 				mExecutionState.instructionArgs[3] = 0;
@@ -1102,6 +1414,59 @@ bool ARM7TDMI::Instruction_Thumb_14()
 					mMemoryBus->Read32(mExecutionState.instructionArgs[1]);
 					mExecutionState.instructionArgs[3] = 1;
 				}
+			}
+		}
+	}
+	return false;
+}
+
+bool ARM7TDMI::Instruction_Thumb_15()
+{
+	uint32_t L = (mExecutionState.instruction >> 11) & 1;
+	uint32_t RList = mExecutionState.instruction & 0xFF;
+	if (mExecutionState.instructionState == 0)
+	{
+		uint32_t Rb = (mExecutionState.instruction >> 8) & 7;
+		uint32_t base_address = mGlobalState.registers[Rb];
+		int nrregisters = count_ones_8(RList);
+		uint32_t start_address = base_address;
+		uint32_t end_address = base_address + 4 * nrregisters;
+		mGlobalState.registers[Rb] = end_address;
+		mExecutionState.instructionArgs[0] = end_address;
+		mExecutionState.instructionArgs[1] = start_address;
+		mExecutionState.instructionArgs[2] = 0;
+		mExecutionState.instructionState++;
+		if (!L) goto store;
+	}
+	else
+	{
+		if (L)//load
+		{
+			if (mExecutionState.instructionArgs[3] && mMemoryBus->IsDataReady())
+			{
+				mExecutionState.instructionArgs[3] = 0;
+				mGlobalState.registers[mExecutionState.instructionArgs[2]] = mMemoryBus->GetReadResult();
+				mExecutionState.instructionArgs[1] += 4;
+				mExecutionState.instructionArgs[2]++;
+				if (mExecutionState.instructionArgs[1] == mExecutionState.instructionArgs[0]) return true;
+			}
+			if (!mMemoryBus->IsBusy())
+			{
+				while (mExecutionState.instructionArgs[2] <= 7 && !((RList >> mExecutionState.instructionArgs[2]) & 1)) mExecutionState.instructionArgs[2]++;
+				mMemoryBus->Read32(mExecutionState.instructionArgs[1]);
+				mExecutionState.instructionArgs[3] = 1;
+			}
+		}
+		else
+		{
+		store:
+			if (!mMemoryBus->IsBusy())
+			{
+				while (mExecutionState.instructionArgs[2] <= 7 && !((RList >> mExecutionState.instructionArgs[2]) & 1)) mExecutionState.instructionArgs[2]++;
+				mMemoryBus->Write32(mExecutionState.instructionArgs[1], mGlobalState.registers[mExecutionState.instructionArgs[2]]);
+				mExecutionState.instructionArgs[1] += 4;
+				if (mExecutionState.instructionArgs[1] == mExecutionState.instructionArgs[0]) return true;
+				mExecutionState.instructionArgs[2]++;
 			}
 		}
 	}
@@ -1143,7 +1508,7 @@ bool ARM7TDMI::Instruction_Thumb_18()
 
 bool ARM7TDMI::Instruction_Thumb_19A()
 {
-	*GetRegisterById(14) = mExecutionState.instructionPC + 4 + ((mExecutionState.instruction & 0x7FF) << 12);
+	*GetRegisterById(14) = mExecutionState.instructionPC + 4 + ((((int)((mExecutionState.instruction & 0x7FF) << 21)) >> 21) << 12);
 	return true;
 }
 

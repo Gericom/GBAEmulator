@@ -78,9 +78,11 @@ private:
 	DecodingState mDecodingState;
 	ExecutionState mExecutionState;
 	MemoryBus* mMemoryBus;
+
+	bool irqPending;
 public:
 	ARM7TDMI(MemoryBus* memoryBus, uint32_t entryAddress)
-		: mMemoryBus(memoryBus)
+		: mMemoryBus(memoryBus), irqPending(false)
 	{
 		ZeroMemory(&mGlobalState, sizeof(mGlobalState));
 		ZeroMemory(&mFetchingState, sizeof(mFetchingState));
@@ -88,9 +90,15 @@ public:
 		ZeroMemory(&mExecutionState, sizeof(mExecutionState));
 		mDecodingState.done = true;
 		mGlobalState.registers[15] = entryAddress;
-		mGlobalState.mode = ARM7TDMI_CSPR_MODE_SYS;
+		mGlobalState.mode = ARM7TDMI_CSPR_MODE_SVC;
+		mGlobalState.fiq_disable = true;
+		mGlobalState.irq_disable = true;
 	}
 	void RunCycle();
+	void RequestIRQ()
+	{
+		if(!mGlobalState.irq_disable) irqPending = true;
+	}
 private:
 	bool EvaluateCondition(uint32_t condition);
 	uint32_t Shift(uint32_t ShiftType, uint32_t Value, uint32_t NrBits, bool &Carry);
@@ -99,6 +107,8 @@ private:
 	bool Instruction_Nop();
 	bool Instruction_DataProc();
 	bool Instruction_SingleDataTrans();
+	bool Instruction_HDSDataTrans();
+	bool Instruction_BlockDataTrans();
 	bool Instruction_Branch();
 
 	bool Instruction_Thumb_1();
@@ -108,12 +118,14 @@ private:
 	bool Instruction_Thumb_5();
 	bool Instruction_Thumb_6();
 	bool Instruction_Thumb_7();
+	bool Instruction_Thumb_8();
 	bool Instruction_Thumb_9();
 	bool Instruction_Thumb_10();
 	bool Instruction_Thumb_11();
 	bool Instruction_Thumb_12();
 	bool Instruction_Thumb_13();
 	bool Instruction_Thumb_14();
+	bool Instruction_Thumb_15();
 	bool Instruction_Thumb_16();
 	bool Instruction_Thumb_17();
 	bool Instruction_Thumb_18();

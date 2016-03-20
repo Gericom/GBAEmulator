@@ -28,5 +28,6 @@ void BIOS::HandleRequest(MemoryBus* memoryBus)
 	else
 	{
 		//What do I do here, this shouldn't happen however
+		OutputDebugString(L"Unknown Memory!");
 	}
 }
