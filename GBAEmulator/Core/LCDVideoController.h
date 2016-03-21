@@ -57,6 +57,27 @@ typedef struct
 }
 GXOamAttr;
 
+typedef struct
+{
+	uint16_t     _0;
+	uint16_t     _1;
+	uint16_t     _2;
+	int16_t     PA;
+	uint16_t     _4;
+	uint16_t     _5;
+	uint16_t     _6;
+	int16_t     PB;
+	uint16_t     _8;
+	uint16_t     _9;
+	uint16_t     _10;
+	int16_t     PC;
+	uint16_t     _12;
+	uint16_t     _13;
+	uint16_t     _14;
+	int16_t     PD;
+}
+GXOamAffine;
+
 typedef union
 {
 	uint16_t color;
@@ -82,9 +103,26 @@ private:
 	int mY;
 
 	HDC mHDC;
+	COLORREF mFrameBuffer[160 * 240];
+	BITMAPINFO* mDIB;
 public:
 	LCDVideoController(ARM7TDMI* processor, IORegisters* ioRegisters, PalRam* palRam, VRAM* vram, OAM* oam, HDC hdc)
 		: mProcessor(processor), mIORegisters(ioRegisters), mPalRam(palRam), mVRAM(vram), mOAM(oam), mClockCounter(0), mX(0), mY(0), mHDC(hdc)
-	{ }
+	{ 
+		mDIB = (BITMAPINFO*)malloc(sizeof(BITMAPINFO) + sizeof(RGBQUAD) * 256);
+		memset(mDIB, 0, sizeof(BITMAPINFO) + sizeof(RGBQUAD) * 256);
+		BITMAPINFOHEADER* bmInfohdr = &mDIB->bmiHeader;
+		bmInfohdr->biSize = sizeof(BITMAPINFO);// + sizeof(RGBQUAD) * 256; //I think it's not of use
+		bmInfohdr->biWidth = 240;
+		bmInfohdr->biHeight = -160;
+		bmInfohdr->biPlanes = 1;
+		bmInfohdr->biBitCount = 32;
+		bmInfohdr->biCompression = BI_RGB;
+
+	}
+	~LCDVideoController()
+	{
+		free(mDIB);
+	}
 	void RunCycle();
 };

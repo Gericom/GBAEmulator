@@ -6,9 +6,9 @@ void GamePakInterface::HandleRequest(MemoryBus* memoryBus)
 	//TODO: Implement waitstates and alignment later on
 	if (memoryBus->mRequestAddress < 0x0E000000)
 	{
-		if ((memoryBus->mRequest == MEMORYBUS_REQUEST_READ_8 ||
-				memoryBus->mRequest == MEMORYBUS_REQUEST_READ_16 ||
-				memoryBus->mRequest == MEMORYBUS_REQUEST_READ_32) &&
+		if (//(memoryBus->mRequest == MEMORYBUS_REQUEST_READ_8 ||
+			//	memoryBus->mRequest == MEMORYBUS_REQUEST_READ_16 ||
+			//	memoryBus->mRequest == MEMORYBUS_REQUEST_READ_32) &&
 			(memoryBus->mRequestAddress - 0x08000000) >= mRomDataSize)
 		{
 			memoryBus->mRequestData = 0;
@@ -50,6 +50,8 @@ void GamePakInterface::HandleRequest(MemoryBus* memoryBus)
 	}
 	else
 	{
-		//TODO
+		memoryBus->mRequestData = 0xFF;
+		memoryBus->mRequestComplete = true;
+		return;
 	}
 }

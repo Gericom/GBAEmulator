@@ -14,6 +14,7 @@
 #include "Core\GamePakInterface.h"
 #include "Core\LCDVideoController.h"
 #include "Core\ARM7TDMI.h"
+#include "Core\DMA.h"
 #include "GBAEmulator.h"
 
 static bool stop = false;
@@ -204,7 +205,7 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 DWORD WINAPI MainThread(LPVOID lpParam)
 {
 	HDC hdc = GetDC(hWnd);
-	FILE* rom = fopen("d:\\Old\\Temp\\MKSC\\Mario Kart Super Circuit (U).gba", "rb");
+	FILE* rom = fopen("d:\\Backup\\DS MicroSD\\GBA Games\\Mario Kart Super Circuit (U).gba", "rb");
 	fseek(rom, 0, SEEK_END);
 	long size = ftell(rom);
 	uint8_t* data = (uint8_t*)malloc(size);
@@ -218,6 +219,10 @@ DWORD WINAPI MainThread(LPVOID lpParam)
 	fseek(biosFile, 0, SEEK_SET);
 	fread(biosData, 1, size2, biosFile);
 	fclose(biosFile);
+	biosData[0xB0] = 0;
+	biosData[0xB1] = 0;
+	biosData[0xB2] = 0;
+	biosData[0xB3] = 0;
 	MemoryBus* memoryBus = new MemoryBus();
 	BIOS* bios = new BIOS(biosData);
 	memoryBus->SetDevice(bios, 0);
@@ -241,12 +246,33 @@ DWORD WINAPI MainThread(LPVOID lpParam)
 	memoryBus->SetDevice(gamePak, 12);
 	memoryBus->SetDevice(gamePak, 13);
 	memoryBus->SetDevice(gamePak, 14);
-	ARM7TDMI* processor = new ARM7TDMI(memoryBus, 0);
+	ARM7TDMI* processor = new ARM7TDMI(memoryBus, ioRegisters);
 	LCDVideoController* lcdVideoController = new LCDVideoController(processor, ioRegisters, palRam, vram, oam, hdc);
+	DMA* dma = new DMA(memoryBus, ioRegisters);
+	int inputcounter = 0;
 	while (!stop)
 	{
+		if (!inputcounter)
+		{
+			if (GetForegroundWindow() == hWnd)
+			{
+				uint16_t keymask = 0;
+				if (GetKeyState(VK_UP) & 0x8000)
+					keymask |= (1 << 6);
+				if (GetKeyState('X') & 0x8000)
+					keymask |= (1 << 0);
+				if (GetKeyState('Z') & 0x8000)
+					keymask |= (1 << 1);
+				if (GetKeyState(VK_DOWN) & 0x8000)
+					keymask |= (1 << 7);
+				keymask ^= 0x3FF;
+				*((uint16_t*)&ioRegisters->mMemory[0x130]) = keymask;
+			}
+		}
+		inputcounter = (inputcounter + 1) % 60;
 		lcdVideoController->RunCycle();
 		memoryBus->RunCycle();
+		dma->RunCycle();
 		processor->RunCycle();
 	}
 	delete processor;

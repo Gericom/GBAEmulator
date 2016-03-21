@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "IORegisters.h"
 #include "ARM7TDMI.h"
 
 #define ADD_VFLAG(a,b,r)	((((a) >= 0 && (b) >= 0) || ((a) < 0 && (b) < 0)) && (((a) < 0 && (r) >= 0) || ((a) >= 0 && (r) < 0)))
@@ -129,6 +130,21 @@ void ARM7TDMI::RunCycle()
 		mFetchingState.cancelData = false;
 	}
 
+	if (mIORegisters->mMemory[0x301] == 0 && !(*((uint16_t*)&mIORegisters->mMemory[0x200]) & *((uint16_t*)&mIORegisters->mMemory[0x202])))
+		return;
+	else if (mIORegisters->mMemory[0x301] == 0)
+	{
+		mGlobalState.registers_irq[1] = mExecutionState.instructionPC + (mGlobalState.thumb ? 2 + 4 : 4 + 4);
+		mGlobalState.spsr_irq = mGlobalState.cspr;
+		mGlobalState.irq_disable = true;
+		mGlobalState.thumb = false;
+		mGlobalState.mode = ARM7TDMI_CSPR_MODE_IRQ;
+		mGlobalState.registers[15] = 0x00000018;
+		FlushPipeline();
+	}
+
+	mIORegisters->mMemory[0x301] = 0xFF;
+
 	//execute
 	if (mExecutionState.instructionProc)
 	{
@@ -136,9 +152,11 @@ void ARM7TDMI::RunCycle()
 			mExecutionState.instructionProc = NULL;
 	}
 
-	if (!mExecutionState.instructionProc && !mGlobalState.irq_disable && irqPending)
+	if (!mExecutionState.instructionProc && !mGlobalState.irq_disable && 
+		(*((uint16_t*)&mIORegisters->mMemory[0x200]) & *((uint16_t*)&mIORegisters->mMemory[0x202])) &&
+		*((uint16_t*)&mIORegisters->mMemory[0x208]))//irqPending)
 	{
-		irqPending = false;
+		//irqPending = false;
 		mGlobalState.registers_irq[1] = mExecutionState.instructionPC + (mGlobalState.thumb ? 2 + 4 : 4 + 4);
 		mGlobalState.spsr_irq = mGlobalState.cspr;
 		mGlobalState.irq_disable = true;
@@ -188,7 +206,9 @@ void ARM7TDMI::RunCycle()
 					if (((mDecodingState.instruction >> 25) & 7) == 0 && ((mDecodingState.instruction >> 7) & 1) == 1 && ((mDecodingState.instruction >> 4) & 1) == 1)
 						mExecutionState.instructionProc = &ARM7TDMI::Instruction_HDSDataTrans;
 					else if (((mDecodingState.instruction >> 25) & 7) == 0 && ((mDecodingState.instruction >> 4) & 0xF) == 9)
-						OutputDebugString(L"Unknown instruction!");
+					{
+						wprintf(L"Unknown instruction!");
+					}
 					else mExecutionState.instructionProc = &ARM7TDMI::Instruction_DataProc;
 					break;
 				case 0x2:
@@ -1486,9 +1506,8 @@ bool ARM7TDMI::Instruction_Thumb_16()
 
 bool ARM7TDMI::Instruction_Thumb_17()
 {
-	mGlobalState.registers_svc[1] = mExecutionState.instructionPC + 2;
+	mGlobalState.registers_svc[1] = (mExecutionState.instructionPC & ~1) + 2;
 	mGlobalState.spsr_svc = mGlobalState.cspr;
-	mGlobalState.fiq_disable = true;
 	mGlobalState.irq_disable = true;
 	mGlobalState.thumb = false;
 	mGlobalState.mode = ARM7TDMI_CSPR_MODE_SVC;

@@ -78,27 +78,22 @@ private:
 	DecodingState mDecodingState;
 	ExecutionState mExecutionState;
 	MemoryBus* mMemoryBus;
-
-	bool irqPending;
+	IORegisters* mIORegisters;
 public:
-	ARM7TDMI(MemoryBus* memoryBus, uint32_t entryAddress)
-		: mMemoryBus(memoryBus), irqPending(false)
+	ARM7TDMI(MemoryBus* memoryBus, IORegisters* ioRegisters)
+		: mMemoryBus(memoryBus), mIORegisters(ioRegisters)
 	{
 		ZeroMemory(&mGlobalState, sizeof(mGlobalState));
 		ZeroMemory(&mFetchingState, sizeof(mFetchingState));
 		ZeroMemory(&mDecodingState, sizeof(mDecodingState));
 		ZeroMemory(&mExecutionState, sizeof(mExecutionState));
 		mDecodingState.done = true;
-		mGlobalState.registers[15] = entryAddress;
+		mGlobalState.registers[15] = 0;
 		mGlobalState.mode = ARM7TDMI_CSPR_MODE_SVC;
 		mGlobalState.fiq_disable = true;
 		mGlobalState.irq_disable = true;
 	}
 	void RunCycle();
-	void RequestIRQ()
-	{
-		if(!mGlobalState.irq_disable) irqPending = true;
-	}
 private:
 	bool EvaluateCondition(uint32_t condition);
 	uint32_t Shift(uint32_t ShiftType, uint32_t Value, uint32_t NrBits, bool &Carry);

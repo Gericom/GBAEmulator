@@ -26,6 +26,8 @@ void IORegisters::HandleRequest(MemoryBus* memoryBus)
 			{
 				mMemory[memoryBus->mRequestAddress - 0x04000000] &= (~memoryBus->mRequestData) & 0xFF;
 			}
+			else if (memoryBus->mRequestAddress == 0x04000301)
+				mMemory[memoryBus->mRequestAddress - 0x04000000] = memoryBus->mRequestData & 0xFF;
 			else mMemory[memoryBus->mRequestAddress - 0x04000000] = memoryBus->mRequestData & 0xFF;
 			memoryBus->mRequestComplete = true;
 			break;
@@ -57,5 +59,8 @@ void IORegisters::HandleRequest(MemoryBus* memoryBus)
 	{
 		//What do I do here, this shouldn't happen however
 		OutputDebugString(L"Unknown Memory!");
+		memoryBus->mRequestData = 0;
+		memoryBus->mRequestComplete = true;
+		return;
 	}
 }
