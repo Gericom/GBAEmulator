@@ -13,15 +13,16 @@ void BIOS::HandleRequest(MemoryBus* memoryBus)
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_READ_16:
-			memoryBus->mRequestData = ((uint8_t*)mBIOSData)[memoryBus->mRequestAddress] | (((uint8_t*)mBIOSData)[memoryBus->mRequestAddress + 1] << 8);
+			memoryBus->mRequestData = *((uint16_t*)&((uint8_t*)mBIOSData)[memoryBus->mRequestAddress]);
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_READ_32:
-			memoryBus->mRequestData = ((uint8_t*)mBIOSData)[memoryBus->mRequestAddress] | (((uint8_t*)mBIOSData)[memoryBus->mRequestAddress + 1] << 8) |
-				(((uint8_t*)mBIOSData)[memoryBus->mRequestAddress + 2] << 16) | (((uint8_t*)mBIOSData)[memoryBus->mRequestAddress + 3] << 24);
+			memoryBus->mRequestData = *((uint32_t*)&((uint8_t*)mBIOSData)[memoryBus->mRequestAddress]);
 			memoryBus->mRequestComplete = true;
 			break;
 		default:
+			memoryBus->mRequestData = 0;
+			memoryBus->mRequestComplete = true;
 			break;
 		}
 	}
@@ -29,5 +30,7 @@ void BIOS::HandleRequest(MemoryBus* memoryBus)
 	{
 		//What do I do here, this shouldn't happen however
 		OutputDebugString(L"Unknown Memory!");
+		memoryBus->mRequestData = 0;
+		memoryBus->mRequestComplete = true;
 	}
 }

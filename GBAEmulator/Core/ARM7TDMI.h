@@ -97,14 +97,33 @@ public:
 private:
 	bool EvaluateCondition(uint32_t condition);
 	uint32_t Shift(uint32_t ShiftType, uint32_t Value, uint32_t NrBits, bool &Carry);
-	uint32_t* GetRegisterById(int id);
+	uint32_t* ARM7TDMI::GetRegisterById(int id)
+	{
+		if (id <= 7 || id == 15 || mGlobalState.mode == ARM7TDMI_CSPR_MODE_USR || mGlobalState.mode == ARM7TDMI_CSPR_MODE_SYS)
+			return &mGlobalState.registers[id];
+		if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_FIQ)
+			return &mGlobalState.registers_fiq[id - 8];
+		else if (id < 13)
+			return &mGlobalState.registers[id];
+		else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_SVC)
+			return &mGlobalState.registers_svc[id - 13];
+		else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_ABT)
+			return &mGlobalState.registers_abt[id - 13];
+		else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_IRQ)
+			return &mGlobalState.registers_irq[id - 13];
+		else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_UND)
+			return &mGlobalState.registers_und[id - 13];
+		return NULL;
+	}
 	void FlushPipeline();
 	bool Instruction_Nop();
 	bool Instruction_DataProc();
+	bool Instruction_Multiply();
 	bool Instruction_SingleDataTrans();
 	bool Instruction_HDSDataTrans();
 	bool Instruction_BlockDataTrans();
 	bool Instruction_Branch();
+	bool Instruction_SWI();
 
 	bool Instruction_Thumb_1();
 	bool Instruction_Thumb_2();

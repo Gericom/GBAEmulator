@@ -95,24 +95,7 @@ uint32_t ARM7TDMI::Shift(uint32_t ShiftType, uint32_t Value, uint32_t NrBits, bo
 	return 0xFFFFFFFF;
 }
 
-uint32_t* ARM7TDMI::GetRegisterById(int id)
-{
-	if (id <= 7 || id == 15 || mGlobalState.mode == ARM7TDMI_CSPR_MODE_USR || mGlobalState.mode == ARM7TDMI_CSPR_MODE_SYS)
-		return &mGlobalState.registers[id];
-	if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_FIQ)
-		return &mGlobalState.registers_fiq[id - 8];
-	else if (id < 13)
-		return &mGlobalState.registers[id];
-	else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_SVC)
-		return &mGlobalState.registers_svc[id - 13];
-	else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_ABT)
-		return &mGlobalState.registers_abt[id - 13];
-	else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_IRQ)
-		return &mGlobalState.registers_irq[id - 13];
-	else if (mGlobalState.mode == ARM7TDMI_CSPR_MODE_UND)
-		return &mGlobalState.registers_und[id - 13];
-	return NULL;
-}
+
 
 void ARM7TDMI::RunCycle()
 {
@@ -134,7 +117,17 @@ void ARM7TDMI::RunCycle()
 		return;
 	else if (mIORegisters->mMemory[0x301] == 0)
 	{
-		mGlobalState.registers_irq[1] = mExecutionState.instructionPC + (mGlobalState.thumb ? 2 + 4 : 4 + 4);
+		if (((mGlobalState.registers[15] & ~1) == (mExecutionState.instructionPC & ~1)
+			|| (mGlobalState.registers[15] & ~1) - 2 == (mExecutionState.instructionPC & ~1)
+			|| (mGlobalState.registers[15] & ~1) - 4 == (mExecutionState.instructionPC & ~1)
+			|| (mGlobalState.registers[15] & ~1) - 6 == (mExecutionState.instructionPC & ~1)
+			|| (mGlobalState.registers[15] & ~1) - 8 == (mExecutionState.instructionPC & ~1)) &&
+			((mGlobalState.registers[15] & ~1) == (mDecodingState.instructionPC & ~1)
+				|| (mGlobalState.registers[15] & ~1) - 2 == (mDecodingState.instructionPC & ~1)
+				|| (mGlobalState.registers[15] & ~1) - 4 == (mDecodingState.instructionPC & ~1)))
+			mGlobalState.registers_irq[1] = (mExecutionState.instructionPC & ~1) + (mGlobalState.thumb ? 2 + 4 : 4 + 4);
+		else
+			mGlobalState.registers_irq[1] = (mGlobalState.registers[15] & ~1) + 4;
 		mGlobalState.spsr_irq = mGlobalState.cspr;
 		mGlobalState.irq_disable = true;
 		mGlobalState.thumb = false;
@@ -148,16 +141,30 @@ void ARM7TDMI::RunCycle()
 	//execute
 	if (mExecutionState.instructionProc)
 	{
+		if (mExecutionState.instructionPC == 0x1238)
+		{
+			wprintf(L"LOL!");
+		}
 		if ((this->*mExecutionState.instructionProc)())//returns true if the instruction is fully executed
 			mExecutionState.instructionProc = NULL;
 	}
 
-	if (!mExecutionState.instructionProc && !mGlobalState.irq_disable && 
+	if (!mExecutionState.instructionProc && !mGlobalState.irq_disable &&
 		(*((uint16_t*)&mIORegisters->mMemory[0x200]) & *((uint16_t*)&mIORegisters->mMemory[0x202])) &&
-		*((uint16_t*)&mIORegisters->mMemory[0x208]))//irqPending)
+		*((uint16_t*)&mIORegisters->mMemory[0x208]))
 	{
 		//irqPending = false;
-		mGlobalState.registers_irq[1] = mExecutionState.instructionPC + (mGlobalState.thumb ? 2 + 4 : 4 + 4);
+		if (((mGlobalState.registers[15] & ~1) == (mExecutionState.instructionPC & ~1)
+			|| (mGlobalState.registers[15] & ~1) - 2 == (mExecutionState.instructionPC & ~1)
+			|| (mGlobalState.registers[15] & ~1) - 4 == (mExecutionState.instructionPC & ~1)
+			|| (mGlobalState.registers[15] & ~1) - 6 == (mExecutionState.instructionPC & ~1)
+			|| (mGlobalState.registers[15] & ~1) - 8 == (mExecutionState.instructionPC & ~1)) &&
+			((mGlobalState.registers[15] & ~1) == (mDecodingState.instructionPC & ~1)
+				|| (mGlobalState.registers[15] & ~1) - 2 == (mDecodingState.instructionPC & ~1)
+				|| (mGlobalState.registers[15] & ~1) - 4 == (mDecodingState.instructionPC & ~1)))
+			mGlobalState.registers_irq[1] = (mExecutionState.instructionPC & ~1) + (mGlobalState.thumb ? 2 + 4 : 4 + 4);
+		else
+			mGlobalState.registers_irq[1] = (mGlobalState.registers[15] & ~1) + 4;
 		mGlobalState.spsr_irq = mGlobalState.cspr;
 		mGlobalState.irq_disable = true;
 		mGlobalState.thumb = false;
@@ -203,12 +210,10 @@ void ARM7TDMI::RunCycle()
 				{
 				case 0:
 				case 1:
-					if (((mDecodingState.instruction >> 25) & 7) == 0 && ((mDecodingState.instruction >> 7) & 1) == 1 && ((mDecodingState.instruction >> 4) & 1) == 1)
+					if (((mDecodingState.instruction >> 25) & 7) == 0 && ((mDecodingState.instruction >> 7) & 1) == 1 && ((mDecodingState.instruction >> 4) & 1) == 1 && ((mDecodingState.instruction >> 5) & 3) != 0)
 						mExecutionState.instructionProc = &ARM7TDMI::Instruction_HDSDataTrans;
 					else if (((mDecodingState.instruction >> 25) & 7) == 0 && ((mDecodingState.instruction >> 4) & 0xF) == 9)
-					{
-						wprintf(L"Unknown instruction!");
-					}
+						mExecutionState.instructionProc = &ARM7TDMI::Instruction_Multiply;
 					else mExecutionState.instructionProc = &ARM7TDMI::Instruction_DataProc;
 					break;
 				case 0x2:
@@ -222,10 +227,13 @@ void ARM7TDMI::RunCycle()
 					mExecutionState.instructionProc = &ARM7TDMI::Instruction_Branch;
 					break;
 				case 0x7:
-					OutputDebugString(L"Unknown instruction!");
+					if (((mDecodingState.instruction >> 24) & 0xF) == 0xF)
+						mExecutionState.instructionProc = &ARM7TDMI::Instruction_SWI;
+					else
+						wprintf(L"Unknown instruction!");
 					break;//ignore mcr, mrc and that kind of crap
 				default:
-					OutputDebugString(L"Unknown instruction!");
+					wprintf(L"Unknown instruction!");
 					break;
 				}
 
@@ -360,7 +368,9 @@ bool ARM7TDMI::Instruction_DataProc()
 			{
 				uint32_t* Rs = GetRegisterById((mExecutionState.instruction >> 8) & 0xF);
 				uint32_t Reserved = (mExecutionState.instruction >> 7) & 1;
-				Op2 = Shift(ShiftType, *Rm, *Rs & 0xFF, Shift_C);
+				if((*Rs & 0xFF) != 0)
+					Op2 = Shift(ShiftType, *Rm, *Rs & 0xFF, Shift_C);
+				else Op2 = *Rm;
 				additionalCycle = true;
 			}
 		}
@@ -542,22 +552,96 @@ bool ARM7TDMI::Instruction_DataProc()
 	return true;
 }
 
+bool ARM7TDMI::Instruction_Multiply()
+{
+	if (mExecutionState.instructionState == 0)
+	{
+		int Opcode = (mExecutionState.instruction >> 21) & 15;
+		bool S = (mExecutionState.instruction >> 20) & 1;
+		uint32_t* Rd = GetRegisterById((mExecutionState.instruction >> 16) & 0xF);
+		uint32_t* Rn = GetRegisterById((mExecutionState.instruction >> 12) & 0xF);
+		uint32_t* Rs = GetRegisterById((mExecutionState.instruction >> 8) & 0xF);
+		uint32_t* Rm = GetRegisterById(mExecutionState.instruction & 0xF);
+		uint32_t result;
+		uint64_t result_long;
+		switch (Opcode)
+		{
+		case 0://mul
+			result = *Rd = *Rm * *Rs;
+			mExecutionState.instructionArgs[0] = 2;
+			break;
+		case 1://mla
+			result = *Rd = *Rm * *Rs + *Rn;
+			mExecutionState.instructionArgs[0] = 3;
+			break;
+		case 4://umull
+			result_long = ((uint64_t)*Rm) *  ((uint64_t)*Rs);
+			*Rd = result_long >> 32;
+			*Rn = result_long & 0xFFFFFFFF;
+			mExecutionState.instructionArgs[0] = 3;
+			break;
+		case 5://umlal
+			result_long = ((uint64_t)*Rm) * ((uint64_t)*Rs) + ((((uint64_t)*Rd) << 32) | ((uint64_t)*Rn));
+			*Rd = result_long >> 32;
+			*Rn = result_long & 0xFFFFFFFF;
+			mExecutionState.instructionArgs[0] = 3;
+			break;
+		case 6://smull
+			result_long = ((int64_t)*Rm) *  ((int64_t)*Rs);
+			*Rd = result_long >> 32;
+			*Rn = result_long & 0xFFFFFFFF;
+			mExecutionState.instructionArgs[0] = 3;
+			break;
+		case 7://smlal
+			result_long = ((int64_t)*Rm) * ((int64_t)*Rs) + ((((int64_t)*Rd) << 32) | ((int64_t)*Rn));
+			*Rd = result_long >> 32;
+			*Rn = result_long & 0xFFFFFFFF;
+			mExecutionState.instructionArgs[0] = 3;
+			break;
+		default:
+			wprintf(L"Unknown opcode!");
+			break;
+		}
+		if (S && Opcode <= 1)
+		{
+			mGlobalState.n_flag = (result >> 31) == 1;
+			mGlobalState.z_flag = result == 0;
+			mGlobalState.c_flag = 0;
+		}
+		else if (S)
+		{
+			mGlobalState.n_flag = (result_long >> 63) == 1;
+			mGlobalState.z_flag = result_long == 0;
+			mGlobalState.c_flag = 0;
+			mGlobalState.v_flag = 0;
+		}
+		mExecutionState.instructionState++;
+		return false;
+	}
+	else if (mExecutionState.instructionState < mExecutionState.instructionArgs[0])
+	{
+		mExecutionState.instructionState++;
+		return false;
+	}
+	return true;
+}
+
 bool ARM7TDMI::Instruction_SingleDataTrans()
 {
 	if (mExecutionState.instructionState == 0)
 	{
-		bool I = ((mExecutionState.instruction >> 25) & 1) == 1;
-		bool P = ((mExecutionState.instruction >> 24) & 1) == 1;
-		bool U = ((mExecutionState.instruction >> 23) & 1) == 1;
-		bool B = ((mExecutionState.instruction >> 22) & 1) == 1;
+		bool I = (mExecutionState.instruction >> 25) & 1;
+		bool P = (mExecutionState.instruction >> 24) & 1;
+		bool U = (mExecutionState.instruction >> 23) & 1;
+		bool B = (mExecutionState.instruction >> 22) & 1;
 
 		bool T = false;
 		bool W = false;
 
-		if (P) W = ((mExecutionState.instruction >> 21) & 1) == 1;
-		else T = ((mExecutionState.instruction >> 21) & 1) == 1;
+		if (P) W = (mExecutionState.instruction >> 21) & 1;
+		else T = (mExecutionState.instruction >> 21) & 1;
 
-		bool L = ((mExecutionState.instruction >> 20) & 1) == 1;
+		bool L = (mExecutionState.instruction >> 20) & 1;
 
 		uint32_t* Rn = GetRegisterById((mExecutionState.instruction >> 16) & 0xF);
 		uint32_t* Rd = GetRegisterById((mExecutionState.instruction >> 12) & 0xF);
@@ -860,6 +944,17 @@ bool ARM7TDMI::Instruction_Branch()
 	return true;
 }
 
+bool ARM7TDMI::Instruction_SWI()
+{
+	mGlobalState.registers_svc[1] = mExecutionState.instructionPC + 4;
+	mGlobalState.spsr_svc = mGlobalState.cspr;
+	mGlobalState.mode = ARM7TDMI_CSPR_MODE_SVC;
+	mGlobalState.irq_disable = true;
+	mGlobalState.registers[15] = 8;
+	FlushPipeline();
+	return true;
+}
+
 bool ARM7TDMI::Instruction_Thumb_1()
 {
 	uint32_t Opcode = (mExecutionState.instruction >> 11) & 3;
@@ -1044,7 +1139,7 @@ bool ARM7TDMI::Instruction_Thumb_5()
 		else mGlobalState.registers[15] = Rs_val;
 		break;
 	}
-	if ((Rd == 15 && Opcode != 2) || Opcode == 3)
+	if (Rd == 15 || Opcode == 3)
 		FlushPipeline();
 	return true;
 }

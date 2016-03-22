@@ -259,12 +259,18 @@ DWORD WINAPI MainThread(LPVOID lpParam)
 				uint16_t keymask = 0;
 				if (GetKeyState(VK_UP) & 0x8000)
 					keymask |= (1 << 6);
+				if (GetKeyState(VK_DOWN) & 0x8000)
+					keymask |= (1 << 7);
+				if (GetKeyState(VK_LEFT) & 0x8000)
+					keymask |= (1 << 5);
+				if (GetKeyState(VK_RIGHT) & 0x8000)
+					keymask |= (1 << 4);
 				if (GetKeyState('X') & 0x8000)
 					keymask |= (1 << 0);
 				if (GetKeyState('Z') & 0x8000)
 					keymask |= (1 << 1);
-				if (GetKeyState(VK_DOWN) & 0x8000)
-					keymask |= (1 << 7);
+				if (GetKeyState(VK_RETURN) & 0x8000)
+					keymask |= (1 << 3);
 				keymask ^= 0x3FF;
 				*((uint16_t*)&ioRegisters->mMemory[0x130]) = keymask;
 			}

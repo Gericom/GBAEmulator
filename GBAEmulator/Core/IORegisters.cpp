@@ -13,12 +13,11 @@ void IORegisters::HandleRequest(MemoryBus* memoryBus)
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_READ_16:
-			memoryBus->mRequestData = mMemory[memoryBus->mRequestAddress - 0x04000000] | (mMemory[memoryBus->mRequestAddress - 0x04000000 + 1] << 8);
+			memoryBus->mRequestData = *((uint16_t*)&mMemory[memoryBus->mRequestAddress - 0x04000000]);
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_READ_32:
-			memoryBus->mRequestData = mMemory[memoryBus->mRequestAddress - 0x04000000] | (mMemory[memoryBus->mRequestAddress - 0x04000000 + 1] << 8) |
-				(mMemory[memoryBus->mRequestAddress - 0x04000000 + 2] << 16) | (mMemory[memoryBus->mRequestAddress - 0x04000000 + 3] << 24);
+			memoryBus->mRequestData = *((uint32_t*)&mMemory[memoryBus->mRequestAddress - 0x04000000]);
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_WRITE_8:
@@ -39,16 +38,12 @@ void IORegisters::HandleRequest(MemoryBus* memoryBus)
 			}
 			else
 			{
-				mMemory[memoryBus->mRequestAddress - 0x04000000] = memoryBus->mRequestData & 0xFF;
-				mMemory[memoryBus->mRequestAddress - 0x04000000 + 1] = (memoryBus->mRequestData >> 8) & 0xFF;
+				*((uint16_t*)&mMemory[memoryBus->mRequestAddress - 0x04000000]) = memoryBus->mRequestData & 0xFFFF;
 			}
 			memoryBus->mRequestComplete = true;
 			break;
 		case MEMORYBUS_REQUEST_WRITE_32:
-			mMemory[memoryBus->mRequestAddress - 0x04000000] = memoryBus->mRequestData & 0xFF;
-			mMemory[memoryBus->mRequestAddress - 0x04000000 + 1] = (memoryBus->mRequestData >> 8) & 0xFF;
-			mMemory[memoryBus->mRequestAddress - 0x04000000 + 2] = (memoryBus->mRequestData >> 16) & 0xFF;
-			mMemory[memoryBus->mRequestAddress - 0x04000000 + 3] = (memoryBus->mRequestData >> 24) & 0xFF;
+			*((uint32_t*)&mMemory[memoryBus->mRequestAddress - 0x04000000]) = memoryBus->mRequestData & 0xFFFFFFFF;
 			memoryBus->mRequestComplete = true;
 			break;
 		default:

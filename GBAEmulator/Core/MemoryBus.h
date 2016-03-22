@@ -48,14 +48,78 @@ public:
 				mRequest == MEMORYBUS_REQUEST_READ_32);
 	}
 
-	bool Read8(uint32_t address);
-	bool Read16(uint32_t address);
-	bool Read32(uint32_t address);
-	bool Write8(uint32_t address, uint8_t data);
-	bool Write16(uint32_t address, uint16_t data);
-	bool Write32(uint32_t address, uint32_t data);
+	bool Read8(uint32_t address)
+	{
+		if (IsBusy()) return false;
+		mRequest = MEMORYBUS_REQUEST_READ_8;
+		mRequestAddress = address;
+		mRequestComplete = false;
+		mBusy = true;
+		return true;
+	}
 
-	uint32_t GetReadResult();
+	bool Read16(uint32_t address)
+	{
+		if (IsBusy()) return false;
+		mRequest = MEMORYBUS_REQUEST_READ_16;
+		mRequestAddress = address;
+		mRequestComplete = false;
+		mBusy = true;
+		return true;
+	}
+
+	bool Read32(uint32_t address)
+	{
+		if (IsBusy()) return false;
+		mRequest = MEMORYBUS_REQUEST_READ_32;
+		mRequestAddress = address;
+		mRequestComplete = false;
+		mBusy = true;
+		return true;
+	}
+
+	bool Write8(uint32_t address, uint8_t data)
+	{
+		if (IsBusy()) return false;
+		mRequest = MEMORYBUS_REQUEST_WRITE_8;
+		mRequestAddress = address;
+		mRequestData = data;
+		mRequestComplete = false;
+		mBusy = true;
+		return true;
+	}
+
+	bool Write16(uint32_t address, uint16_t data)
+	{
+		if (IsBusy()) return false;
+		mRequest = MEMORYBUS_REQUEST_WRITE_16;
+		mRequestAddress = address;
+		mRequestData = data;
+		mRequestComplete = false;
+		mBusy = true;
+		return true;
+	}
+
+	bool Write32(uint32_t address, uint32_t data)
+	{
+		if (IsBusy()) return false;
+		mRequest = MEMORYBUS_REQUEST_WRITE_32;
+		mRequestAddress = address;
+		mRequestData = data;
+		mRequestComplete = false;
+		mBusy = true;
+		return true;
+	}
+
+	uint32_t GetReadResult()
+	{
+		if (!mRequestComplete ||
+			(mRequest != MEMORYBUS_REQUEST_READ_8 &&
+				mRequest != MEMORYBUS_REQUEST_READ_16 &&
+				mRequest != MEMORYBUS_REQUEST_READ_32)) return 0xFFFFFFFF;
+		mBusy = false;
+		return mRequestData;
+	}
 
 	void SetDevice(MemoryDevice* device, int id)
 	{

@@ -23,9 +23,12 @@ private:
 
 	MemoryBus* mMemoryBus;
 	IORegisters* mIORegisters;
+
+	bool lastVBlankFlag;
+	bool lastHBlankFlag;
 public:
 	DMA(MemoryBus* memoryBus, IORegisters* ioRegisters)
-		: mMemoryBus(memoryBus), mIORegisters(ioRegisters)
+		: mMemoryBus(memoryBus), mIORegisters(ioRegisters), lastVBlankFlag(false), lastHBlankFlag(false)
 	{ 
 		ZeroMemory(&mDMAChannels[0], sizeof(mDMAChannels));
 	}
